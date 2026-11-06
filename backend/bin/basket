@@ -1,0 +1,46 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+// Usage: php bin/basket [-v] B01 G01
+
+use Acme\Basket\BasketFactory;
+use Acme\Catalogue\UnknownProductException;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+/** @var BasketFactory $factory */
+$factory = require __DIR__ . '/../config/acme.php';
+
+$argv = is_array($_SERVER['argv'] ?? null) ? $_SERVER['argv'] : [];
+$args = array_values(array_filter(array_slice($argv, 1), 'is_string'));
+$verbose = in_array('-v', $args, true);
+$codes = array_values(array_filter($args, static fn(string $arg): bool => $arg !== '-v'));
+
+if ($codes === []) {
+    fwrite(STDERR, "Usage: php bin/basket [-v] <product-code>...\n");
+    exit(1);
+}
+
+try {
+    $summary = $factory->create($codes)->summary();
+} catch (UnknownProductException $e) {
+    fwrite(STDERR, $e->getMessage() . "\n");
+    exit(1);
+}
+
+if ($verbose) {
+    foreach ($summary->items as $item) {
+        printf("  %-4s %-14s %10s\n", $item->code, $item->name, $item->price->format());
+    }
+    printf("  %-19s %10s\n", 'Subtotal', $summary->subtotal->format());
+    foreach ($summary->discounts as $discount) {
+        printf("  %-19s %10s  (%s)\n", 'Discount', '-' . $discount->amount->format(), $discount->label);
+    }
+    printf("  %-19s %10s\n", 'Delivery', $summary->delivery->format());
+    printf("  %-19s %10s\n", 'Total', $summary->total->format());
+    exit(0);
+}
+
+echo $summary->total->format(), "\n";
